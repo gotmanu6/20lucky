@@ -38,6 +38,27 @@ int roll_d20() {
     return (rand() % 20) + 1;
 }
 
+void mostrar_menu() {
+    printf("      _______           _______\n");
+    printf("    /\\       \\       /\\       \\\n");
+    printf("   /  \\   o   \\     /  \\ o     \\\n");
+    printf("  / o  \\_______\\   /    \\_______\\\n");
+    printf("  \\    / o     /   \\  o  /       /\n");
+    printf("   \\  /   o   /     \\    / o    /\n");
+    printf("    \\/_______/       \\/_______/\n\n");
+
+    printf("========================================\n");
+    printf("|         JOGO ATAQUE E DEFESA         |\n");
+    printf("========================================\n");
+    printf("|  [1] Jogar                           |\n");
+    printf("|  [2] Creditos                        |\n");
+    printf("|  [3] Sair                            |\n");
+    printf("========================================\n");
+    printf("Escolha uma opcao: ");
+}
+
+
+
 int main(int argc, char **argv) {
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -46,10 +67,11 @@ int main(int argc, char **argv) {
     }
     
     if (argc < 3) {
-        fprintf(stderr, "Uso: %s <host> <porta> [nome]\n", argv[0]);
+        fprintf(stderr, "Uso: %s <host> <porta>\n", argv[0]);
         WSACleanup();
         return 1;
     }
+
     const char *host = argv[1];
     int port = atoi(argv[2]);
 
@@ -62,7 +84,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Resolver o hostname para endereço IP
     struct hostent *he = gethostbyname(host);
     if (he == NULL) {
         fprintf(stderr, "Erro ao resolver host '%s': %d\n", host, WSAGetLastError());
@@ -88,47 +109,72 @@ int main(int argc, char **argv) {
     printf("Conectado com sucesso!\n");
 
     char buf[BUFSZ];
-    // Ler mensagem inicial CONNECTED
     if (recv_line(sock, buf, BUFSZ) <= 0) {
-        printf("Servidor fechou a conexão.\n");
+        printf("Servidor fechou a conexao.\n");
         closesocket(sock);
         WSACleanup();
         return 1;
     }
     printf("Servidor: %s", buf);
 
+    int opcao = 0;
+    while (1) {
+        mostrar_menu();
+        printf("Escolha uma opcao: ");
+        if (scanf("%d", &opcao) != 1) {
+            while (getchar() != '\n');
+            printf("Opcao invalida!\n");
+            continue;
+        }
+        while (getchar() != '\n');
+
+        if (opcao == 1) {
+            printf("\nIniciando o jogo...\n\n");
+            break;
+        } else if (opcao == 2) {
+            printf("\n=== CREDITOS ===\n");
+            printf("Emanuelly Prestes Lopes\n");
+            printf("Clara Ishida\n\n");
+        } else if (opcao == 3) {
+            printf("\nSaindo do jogo... Ate mais!\n");
+            closesocket(sock);
+            WSACleanup();
+            return 0;
+        } else {
+            printf("Opcao invalida! Tente novamente.\n");
+        }
+    }
+
+    // --- JOGO COMECA AQUI ---
     while (1) {
         if (recv_line(sock, buf, BUFSZ) <= 0) {
-            printf("Conexão encerrada pelo servidor.\n");
+            printf("Conexao encerrada pelo servidor.\n");
             break;
         }
         
         if (strncmp(buf, "ROUND", 5) == 0) {
-            // Rolar dois d20 localmente
             int d1 = roll_d20();
             int d2 = roll_d20();
             printf("\n=== NOVA RODADA ===\n");
-            printf("Você rolou: d1=%d (ataque), d2=%d (defesa)\n", d1, d2);
+            printf("Voce rolou: d1=%d (ataque), d2=%d (defesa)\n", d1, d2);
             
             char choice = 0;
             while (1) {
-                printf("Escolha (A = ataque usando d1, D = defesa usando d2): ");
+                printf("Escolha (A = ataque, D = defesa): ");
                 int c = getchar();
-                // Descartar resto da linha
                 while (getchar() != '\n' && c != EOF);
                 
                 if (c == 'A' || c == 'a' || c == 'D' || c == 'd') {
                     choice = (char)c;
                     break;
                 }
-                printf("Entrada inválida. Use A ou D.\n");
+                printf("Entrada invalida. Use A ou D.\n");
             }
             
             char out[BUFSZ];
             snprintf(out, BUFSZ, "ROLL %d %d %c", d1, d2, choice);
             send_line(sock, out);
 
-            // Aguardar mensagens de info/result do servidor
             while (1) {
                 if (recv_line(sock, buf, BUFSZ) <= 0) {
                     printf("Servidor desconectou.\n");
@@ -136,16 +182,14 @@ int main(int argc, char **argv) {
                 }
                 
                 if (strncmp(buf, "INFO", 4) == 0) {
-                    printf("Servidor: %s", buf + 5); // Mostra info após "INFO "
+                    printf("Servidor: %s", buf + 5);
                 } else if (strncmp(buf, "ERROR", 5) == 0) {
                     printf("Servidor erro: %s", buf + 6);
                 } else if (strncmp(buf, "RESULT", 6) == 0) {
                     printf("Servidor: %s\n", buf + 7);
-                    // Se RESULT indica YOU_WIN ou YOU_LOSE -> encerra
                     if (strstr(buf, "YOU_WIN") || strstr(buf, "YOU_LOSE")) {
                         goto end;
                     } else {
-                        // CONTINUE ou TIE -> continuar loop principal
                         break;
                     }
                 } else {
@@ -160,6 +204,6 @@ int main(int argc, char **argv) {
 end:
     closesocket(sock);
     WSACleanup();
-    printf("Conexão finalizada. Obrigado por jogar!\n");
+    printf("Conexao finalizada. Obrigado por jogar!\n");
     return 0;
 }
